@@ -9,25 +9,33 @@
     main { max-width: 960px; margin: auto; }
     button { padding: .55rem .9rem; cursor: pointer; }
     pre { background: #f4f6f8; padding: 1rem; overflow: auto; border-radius: 8px; }
-    .row { display: flex; gap: 1rem; align-items: center; }
+    .row { display: flex; gap: 1rem; align-items: center; margin-bottom: .75rem; }
+    input { padding: .5rem; }
   </style>
 </head>
 <body>
 <main>
   <h1>特殊教育支持计划合规</h1>
-  <p>最小演示页。完整业务流程通过README中的JSON接口调用。</p>
-  <div class="row"><button id="load">加载记录</button><button id="stats">查看状态统计</button></div>
+  <p>最小演示页。完整交接链（冻结、补录、确认、撤回、恢复、回填）通过README中的JSON接口调用。</p>
+  <div class="row"><button id="load">加载记录</button><button id="stats">查看状态统计</button><button id="quarantine">查看隔离写入</button></div>
+  <div class="row"><input id="rid" placeholder="记录ID" size="8"><button id="transfers">交接单链</button><button id="consents">同意链</button><button id="todos">待办</button><button id="audit">审计时间线</button></div>
   <pre id="output">点击上方按钮读取服务状态。</pre>
 </main>
 <script>
 const headers = {"X-User-Id":"demo-admin","X-Role":"admin","X-Org":"demo"};
-async function show(path) {
-  const response = await fetch(path, {headers});
+async function show(path, options) {
+  const response = await fetch(path, Object.assign({headers}, options || {}));
   const data = await response.json();
   document.getElementById("output").textContent = JSON.stringify(data, null, 2);
 }
 document.getElementById("load").onclick = () => show("/api/records?limit=20");
 document.getElementById("stats").onclick = () => show("/api/stats");
+document.getElementById("quarantine").onclick = () => show("/api/quarantine");
+const rid = () => encodeURIComponent(document.getElementById("rid").value.trim());
+document.getElementById("transfers").onclick = () => show(`/api/records/${rid()}/transfers`);
+document.getElementById("consents").onclick = () => show(`/api/records/${rid()}/consents`);
+document.getElementById("todos").onclick = () => show(`/api/records/${rid()}/todos`);
+document.getElementById("audit").onclick = () => show(`/api/records/${rid()}/audit`);
 </script>
 </body>
 </html>
