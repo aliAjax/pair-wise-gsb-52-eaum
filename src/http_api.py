@@ -12,6 +12,9 @@ from .domain import Actor, DomainError, PermissionDenied, ValidationError
 RECORD_RE = re.compile(r"^/api/records/(\d+)$")
 ACTION_RE = re.compile(r"^/api/records/(\d+)/actions/([a-z_]+)$")
 AUDIT_RE = re.compile(r"^/api/records/(\d+)/audit$")
+TRANSFERS_RE = re.compile(r"^/api/records/(\d+)/transfers$")
+TODOS_RE = re.compile(r"^/api/records/(\d+)/todos$")
+QUARANTINE_RE = re.compile(r"^/api/records/(\d+)/quarantine$")
 
 
 def make_handler(service: Any, static_dir: Path):
@@ -57,7 +60,10 @@ def make_handler(service: Any, static_dir: Path):
 
         def _handle_error(self, exc: Exception) -> None:
             if isinstance(exc, DomainError):
-                self._send(exc.status, {"error": exc.code, "message": str(exc)})
+                payload = {"error": exc.code, "message": str(exc)}
+                if exc.details:
+                    payload["details"] = exc.details
+                self._send(exc.status, payload)
             else:
                 self._send(500, {"error": "internal_error", "message": "服务内部错误"})
 
@@ -84,6 +90,18 @@ def make_handler(service: Any, static_dir: Path):
                 if match:
                     self._send(200, {"items": service.timeline(self._actor(), int(match.group(1)))})
                     return
+                match = TRANSFERS_RE.match(parsed.path)
+                if match:
+                    self._send(200, {"items": service.transfers(self._actor(), int(match.group(1)))})
+                    return
+                match = TODOS_RE.match(parsed.path)
+                if match:
+                    self._send(200, {"items": service.todos(self._actor(), int(match.group(1)))})
+                    return
+                match = QUARANTINE_RE.match(parsed.path)
+                if match:
+                    self._send(200, {"items": service.quarantined(self._actor(), int(match.group(1)))})
+                    return
                 if parsed.path == "/api/stats":
                     self._send(200, service.stats(self._actor()))
                     return
@@ -98,6 +116,10 @@ def make_handler(service: Any, static_dir: Path):
                 if parsed.path == "/api/records":
                     record = service.create(self._actor(), body.get("reference", ""), body.get("data", {}))
                     self._send(201, record)
+                    return
+                if parsed.path == "/api/migrations/org-backfill":
+                    result = service.backfill_owner_org(self._actor(), body.get("batch_id", ""), body.get("org", ""))
+                    self._send(200, result)
                     return
                 match = ACTION_RE.match(parsed.path)
                 if match:

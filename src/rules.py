@@ -6,12 +6,17 @@ from .domain import Actor, Conflict, ValidationError, boolean, choice, integer, 
 
 INITIAL_STATE = "draft"
 CREATE_ROLES = {'case_manager'}
-ACTION_ROLES = {'consent': {'parent_rep'}, 'activate': {'case_manager'}, 'log_service': {'case_manager', 'specialist'}, 'review': {'administrator'}, 'amend': {'case_manager'}, 'close': {'administrator'}}
-TRANSITIONS = {'consent': {'draft': 'consented'}, 'activate': {'consented': 'active'}, 'log_service': {'active': 'active'}, 'review': {'active': 'under_review'}, 'amend': {'under_review': 'active'}, 'close': {'active': 'closed', 'under_review': 'closed'}}
+ACTION_ROLES = {'consent': {'parent_rep'}, 'activate': {'case_manager'}, 'log_service': {'case_manager', 'specialist', 'external_provider'}, 'review': {'administrator'}, 'amend': {'case_manager'}, 'close': {'administrator'}, 'withdraw_consent': {'parent_rep'}, 'transfer_initiate': {'case_manager', 'administrator'}, 'transfer_confirm': {'case_manager', 'administrator'}, 'transfer_restore': {'case_manager', 'administrator'}, 'todo_create': {'case_manager', 'specialist', 'administrator'}, 'todo_complete': {'case_manager', 'specialist', 'administrator'}, 'todo_reconfirm': {'case_manager', 'administrator'}}
+TRANSITIONS = {'consent': {'draft': 'consented', 'active': 'active', 'under_review': 'under_review'}, 'activate': {'consented': 'active'}, 'log_service': {'active': 'active'}, 'review': {'active': 'under_review'}, 'amend': {'under_review': 'active'}, 'close': {'active': 'closed', 'under_review': 'closed'}}
+SCHOOL_ROLES = {'case_manager', 'administrator'}
+FREEZE_ALLOWED_ACTIONS = {'log_service', 'consent'}
+TRANSFER_STATES = ('initiated', 'confirmed', 'failed')
 
 
 class DomainRules:
     INITIAL_STATE = INITIAL_STATE
+    SCHOOL_ROLES = SCHOOL_ROLES
+    FREEZE_ALLOWED_ACTIONS = FREEZE_ALLOWED_ACTIONS
 
     def known_role(self, role: str) -> bool:
         all_roles = set(CREATE_ROLES)
@@ -57,6 +62,10 @@ class DomainRules:
             raise Conflict("当前状态不允许执行%s" % action)
         return allowed
 
+    def require_not_frozen(self, record: Dict[str, Any], action: str) -> None:
+        if record["payload"].get("frozen") and action not in FREEZE_ALLOWED_ACTIONS:
+            raise Conflict("计划已冻结，等待交接确认")
+
     def apply_action(self, record: Dict[str, Any], action: str, data: Dict[str, Any]) -> Tuple[str, Dict[str, Any], str]:
         new_state = self.require_transition(record, action)
         data = dict(data or {})
@@ -70,6 +79,7 @@ class DomainRules:
                 raise ValidationError("同意范围不能为空")
             changes["consent"] = True
             changes["consent_scope"] = data["consent_scope"]
+            changes["consent_withdrawn"] = False
             summary = "监护人同意已记录"
         elif action == "activate":
             if not p.get("consent"):

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 class DomainError(Exception):
     status = 400
     code = "domain_error"
+    details = None
 
 
 class ValidationError(DomainError):
@@ -26,6 +27,16 @@ class Conflict(DomainError):
 class PermissionDenied(DomainError):
     status = 403
     code = "permission_denied"
+
+
+class QuarantinedConflict(Conflict):
+    """越权或晚到的写入被隔离，原输入随冲突响应保留。"""
+
+    code = "write_quarantined"
+
+    def __init__(self, message: str, details: Dict[str, Any] = None) -> None:
+        super().__init__(message)
+        self.details = details or {}
 
 
 @dataclass(frozen=True)
